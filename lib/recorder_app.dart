@@ -1,11 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:path/path.dart' as path;
 
 import 'models/settings_model.dart';
 import 'recorder_controller.dart';
-import 'recorder_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/recordings_screen.dart';
 import 'screens/settings_screen.dart';
@@ -35,7 +33,7 @@ class _RecorderAppState extends State<RecorderApp> {
   static const List<Widget> _screens = [
     HomeScreen(),
     RecordingsScreen(),
-    const SettingsScreen(),
+    SettingsScreen(),
   ];
   
   static const List<String> _screenTitles = [
@@ -44,18 +42,6 @@ class _RecorderAppState extends State<RecorderApp> {
     'Settings',
   ];
   
-  static const List<IconData> _screenIcons = [
-    Icons.home_outlined,
-    Icons.video_library_outlined,
-    Icons.settings_outlined,
-  ];
-  
-  static const List<IconData> _screenSelectedIcons = [
-    Icons.home,
-    Icons.video_library_rounded,
-    Icons.settings,
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -145,13 +131,6 @@ class _RecorderAppState extends State<RecorderApp> {
     if (mounted) {
       setState(() {});
     }
-  }
-
-  void _onDrawerItemTapped(int index, BuildContext context) {
-    Navigator.of(context).pop(); // Close the drawer first
-    setState(() {
-      _selectedIndex = index;
-    });
   }
 
   @override

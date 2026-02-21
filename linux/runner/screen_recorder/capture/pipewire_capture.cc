@@ -1,6 +1,7 @@
 #include "pipewire_capture.h"
 
 #include "ffmpeg_writer.h"
+#include "utils/dimensions.h"
 
 #include <pipewire/pipewire.h>
 
@@ -8,9 +9,13 @@
 #include <spa/param/video/format-utils.h>
 #include <spa/pod/builder.h>
 
+#include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <cstring>
 #include <sstream>
+
+using screen_recorder::utils::MakeEvenDimensions;
 
 PipeWireCapture::PipeWireCapture(uint32_t node_id,
                                  int pipewire_fd,
@@ -32,6 +37,13 @@ PipeWireCapture::PipeWireCapture(uint32_t node_id,
       encode_mp4_(encode_mp4),
       capture_audio_(capture_audio),
       audio_device_(std::move(audio_device)) {
+  std::tie(width_, height_) = MakeEvenDimensions(width_, height_);
+  stream_width_ = width_;
+  stream_height_ = height_;
+  stream_stride_ = stream_width_ * 4;
+  frame_size_bytes_ = static_cast<size_t>(width_) * static_cast<size_t>(height_) * 4;
+  frame_buffer_.resize(frame_size_bytes_);
+  last_frame_buffer_.resize(frame_size_bytes_);
   stream_events_.version = PW_VERSION_STREAM_EVENTS;
   stream_events_.state_changed = OnStreamStateChanged;
   stream_events_.param_changed = OnStreamParamChanged;
@@ -63,12 +75,18 @@ void PipeWireCapture::OnStreamParamChanged(void* data, uint32_t id, const struct
   }
   spa_format_video_raw_parse(param, &self->video_info_);
   if (self->encode_mp4_) {
-    const uint32_t width = self->video_info_.size.width > 0 ? self->video_info_.size.width
-                                                            : static_cast<uint32_t>(self->width_);
-    const uint32_t height = self->video_info_.size.height > 0 ? self->video_info_.size.height
-                                                              : static_cast<uint32_t>(self->height_);
-    self->frame_size_bytes_ = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
-    self->pending_frame_bytes_.clear();
+    const int stream_width = self->video_info_.size.width > 0 ? static_cast<int>(self->video_info_.size.width)
+                                                               : self->width_;
+    const int stream_height =
+        self->video_info_.size.height > 0 ? static_cast<int>(self->video_info_.size.height)
+                                          : self->height_;
+    self->stream_width_ = stream_width;
+    self->stream_height_ = stream_height;
+    std::tie(self->width_, self->height_) = MakeEvenDimensions(stream_width, stream_height);
+    self->frame_size_bytes_ =
+        static_cast<size_t>(self->width_) * static_cast<size_t>(self->height_) * 4;
+    self->frame_buffer_.assign(self->frame_size_bytes_, 0);
+    self->last_frame_buffer_.assign(self->frame_size_bytes_, 0);
   }
 }
 
@@ -81,6 +99,7 @@ void PipeWireCapture::OnProcess(void* data) {
 
   const struct spa_buffer* spa_buffer = buffer->buffer;
   uint64_t frame_bytes = 0;
+  bool frame_written = false;
   for (uint32_t i = 0; i < spa_buffer->n_datas; ++i) {
     const struct spa_data* d = &spa_buffer->datas[i];
     if (!d->data || !d->chunk) {
@@ -93,16 +112,89 @@ void PipeWireCapture::OnProcess(void* data) {
 
     const uint8_t* bytes = static_cast<const uint8_t*>(d->data) + d->chunk->offset;
     if (self->encode_mp4_) {
-      if (self->frame_size_bytes_ == 0) {
+      if (self->frame_size_bytes_ == 0 || self->frame_buffer_.size() != self->frame_size_bytes_) {
         self->frame_size_bytes_ = static_cast<size_t>(self->width_) * static_cast<size_t>(self->height_) * 4;
+        self->frame_buffer_.assign(self->frame_size_bytes_, 0);
       }
-      self->pending_frame_bytes_.insert(self->pending_frame_bytes_.end(), bytes, bytes + size);
 
-      while (self->pending_frame_bytes_.size() >= self->frame_size_bytes_) {
-        std::string write_error;
-        if (!self->ffmpeg_writer_->WriteFrame(self->pending_frame_bytes_.data(),
-                                              self->frame_size_bytes_,
-                                              &write_error)) {
+      const int src_width = self->stream_width_ > 0 ? self->stream_width_ : self->width_;
+      const int src_height = self->stream_height_ > 0 ? self->stream_height_ : self->height_;
+      const int32_t chunk_stride = d->chunk->stride;
+      int src_stride = chunk_stride != 0 ? static_cast<int>(chunk_stride) : self->stream_stride_;
+      if (src_stride == 0) {
+        // Some PipeWire buffers omit chunk stride; infer from payload when possible.
+        const int min_row_bytes = src_width * 4;
+        if (src_height > 0) {
+          const int inferred = static_cast<int>(size / static_cast<uint32_t>(src_height));
+          if (inferred >= min_row_bytes) {
+            src_stride = inferred;
+          }
+        }
+        if (src_stride == 0) {
+          src_stride = min_row_bytes;
+        }
+      }
+      self->stream_stride_ = src_stride;
+
+      const int abs_src_stride = std::abs(src_stride);
+      if (abs_src_stride <= 0) {
+        self->stream_failed_ = true;
+        self->stream_error_ = "Invalid source stride from PipeWire buffer";
+        if (self->loop_) {
+          pw_main_loop_quit(self->loop_);
+        }
+        break;
+      }
+
+      std::fill(self->frame_buffer_.begin(), self->frame_buffer_.end(), 0);
+      const int dst_stride = self->width_ * 4;
+      const int max_rows_from_chunk = static_cast<int>(size / static_cast<uint32_t>(abs_src_stride));
+      const int copy_rows = std::max(0, std::min({self->height_, src_height, max_rows_from_chunk}));
+      const int bytes_per_row = std::max(0, std::min(dst_stride, src_width * 4));
+
+      if (copy_rows == 0 || bytes_per_row == 0) {
+        continue;
+      }
+
+      const uint8_t* src_first_row = bytes;
+      if (src_stride < 0) {
+        src_first_row = bytes + static_cast<size_t>(copy_rows - 1) * static_cast<size_t>(abs_src_stride);
+      }
+
+      for (int row = 0; row < copy_rows; ++row) {
+        const uint8_t* src_row = src_stride > 0
+                                     ? src_first_row + static_cast<size_t>(row) * static_cast<size_t>(abs_src_stride)
+                                     : src_first_row - static_cast<size_t>(row) * static_cast<size_t>(abs_src_stride);
+        uint8_t* dst_row = self->frame_buffer_.data() + static_cast<size_t>(row) * static_cast<size_t>(dst_stride);
+        std::memcpy(dst_row, src_row, static_cast<size_t>(bytes_per_row));
+      }
+
+      self->last_frame_buffer_ = self->frame_buffer_;
+
+      // Pace emission against monotonic time so output duration tracks real time
+      // even when capture callbacks jitter or frames are dropped under load.
+      const auto now = std::chrono::steady_clock::now();
+      if (!self->video_clock_started_) {
+        self->video_clock_started_ = true;
+        self->video_start_time_ = now;
+      }
+      const double elapsed_sec =
+          std::chrono::duration<double>(now - self->video_start_time_).count();
+      const double target_frames_f = elapsed_sec * static_cast<double>(self->fps_) + 1.0;
+      uint64_t target_frame_count = static_cast<uint64_t>(std::floor(target_frames_f));
+      if (target_frame_count <= self->emitted_frame_count_) {
+        target_frame_count = self->emitted_frame_count_ + 1;
+      }
+
+      // Allow meaningful catch-up so output frame count tracks wallclock time.
+      const uint64_t max_burst = std::max<uint64_t>(self->fps_, 8);
+      uint64_t frames_to_emit = target_frame_count - self->emitted_frame_count_;
+      frames_to_emit = std::min(frames_to_emit, max_burst);
+
+      std::string write_error;
+      for (uint64_t n = 0; n < frames_to_emit; ++n) {
+        if (!self->ffmpeg_writer_->WriteFrame(
+                self->last_frame_buffer_.data(), self->frame_size_bytes_, &write_error)) {
           self->stream_failed_ = true;
           self->stream_error_ = write_error;
           if (self->loop_) {
@@ -110,13 +202,15 @@ void PipeWireCapture::OnProcess(void* data) {
           }
           break;
         }
+        ++self->emitted_frame_count_;
         frame_bytes += self->frame_size_bytes_;
-        self->pending_frame_bytes_.erase(self->pending_frame_bytes_.begin(),
-                                         self->pending_frame_bytes_.begin() + self->frame_size_bytes_);
+        frame_written = true;
       }
       if (self->stream_failed_) {
         break;
       }
+
+      break;
     } else {
       const size_t written = fwrite(bytes, 1, size, self->output_file_);
       if (written != size) {
@@ -128,12 +222,14 @@ void PipeWireCapture::OnProcess(void* data) {
         break;
       }
       frame_bytes += written;
+      frame_written = true;
+      break;
     }
   }
 
   pw_stream_queue_buffer(self->stream_, buffer);
 
-  if (frame_bytes > 0) {
+  if (frame_written && frame_bytes > 0) {
     self->bytes_written_ += frame_bytes;
     const uint32_t frame = ++self->frame_count_;
     if (self->max_frames_ > 0 && frame >= self->max_frames_ && self->loop_) {
@@ -215,7 +311,8 @@ bool PipeWireCapture::ConnectStream(std::string* error_out) {
       &builder,
       SPA_TYPE_OBJECT_Format, SPA_PARAM_EnumFormat,
       SPA_FORMAT_mediaType, SPA_POD_Id(SPA_MEDIA_TYPE_video),
-      SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw)));
+      SPA_FORMAT_mediaSubtype, SPA_POD_Id(SPA_MEDIA_SUBTYPE_raw),
+      SPA_FORMAT_VIDEO_format, SPA_POD_Id(SPA_VIDEO_FORMAT_BGRx)));
 
   const int rv = pw_stream_connect(
       stream_,

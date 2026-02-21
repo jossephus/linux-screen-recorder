@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <pipewire/pipewire.h>
@@ -41,6 +42,9 @@ class PipeWireCapture {
   int pipewire_fd_;
   int width_;
   int height_;
+  int stream_width_ = 0;
+  int stream_height_ = 0;
+  int stream_stride_ = 0;
   uint32_t fps_;
   std::string output_path_;
   uint32_t max_frames_;
@@ -60,7 +64,11 @@ class PipeWireCapture {
   std::atomic<uint32_t> frame_count_ {0};
   std::atomic<uint64_t> bytes_written_ {0};
   size_t frame_size_bytes_ = 0;
-  std::vector<uint8_t> pending_frame_bytes_;
+  std::vector<uint8_t> frame_buffer_;
+  std::vector<uint8_t> last_frame_buffer_;
+  bool video_clock_started_ = false;
+  std::chrono::steady_clock::time_point video_start_time_ {};
+  uint64_t emitted_frame_count_ = 0;
   std::atomic<bool> stop_requested_ {false};
   bool stream_failed_ = false;
   std::string stream_error_;

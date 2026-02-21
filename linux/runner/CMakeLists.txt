@@ -41,6 +41,7 @@ target_include_directories(${BINARY_NAME} PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/screen_recorder/portal"
   "${CMAKE_CURRENT_SOURCE_DIR}/screen_recorder/capture"
   "${CMAKE_CURRENT_SOURCE_DIR}/screen_recorder/encoder"
+  "${CMAKE_CURRENT_SOURCE_DIR}/screen_recorder/utils"
   ${GLIB_INCLUDE_DIRS}
   ${GIO_INCLUDE_DIRS}
   ${PIPEWIRE_INCLUDE_DIRS}

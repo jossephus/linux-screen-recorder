@@ -4,10 +4,10 @@ import 'package:provider/provider.dart';
 import '../models/settings_model.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({Key? key}) : super(key: key);
+  const SettingsScreen({super.key});
 
   @override
-  _SettingsScreenState createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
@@ -94,6 +94,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
+                        spacing: 16,
                         children: [
                           const Text(
                             'Recording Settings',
@@ -102,7 +103,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 16),
                           TextField(
                             controller: _fpsController,
                             decoration: const InputDecoration(
@@ -112,7 +112,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                             keyboardType: TextInputType.number,
                           ),
-                          const SizedBox(height: 16),
                           Row(
                             children: [
                               Expanded(
@@ -138,7 +137,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 16),
                           SwitchListTile(
                             title: const Text('Enable Audio Recording'),
                             value: settings.audioEnabled,

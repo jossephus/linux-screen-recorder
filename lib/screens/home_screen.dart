@@ -1,17 +1,13 @@
 import 'dart:io';
-import 'dart:async';
-
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 
 import '../models/settings_model.dart';
 import '../recorder_controller.dart';
-import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -239,23 +235,24 @@ class _HomeScreenState extends State<HomeScreen> {
       final fileName = 'recording_$timestamp.mp4';
       final savePath = path.join(settings.savePath, fileName);
       
+      // Start the recording (this will show screen selection)
       await controller.start(
         path: savePath,
         fps: settings.fps,
         audio: settings.audioEnabled,
       );
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recording started')),
-        );
-      }
+
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(this.context);
+      messenger.clearSnackBars();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Recording started')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error starting recording: $e')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(content: Text('Error starting recording: $e')),
+      );
     }
   }
 
@@ -265,17 +262,15 @@ class _HomeScreenState extends State<HomeScreen> {
   ) async {
     try {
       await controller.stop();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recording saved')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        const SnackBar(content: Text('Recording saved')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error stopping recording: $e')),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(content: Text('Error stopping recording: $e')),
+      );
     }
   }
 }

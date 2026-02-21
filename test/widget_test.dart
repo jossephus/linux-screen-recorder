@@ -13,7 +13,7 @@ void main() {
         providers: [
           ChangeNotifierProvider(create: (_) => SettingsModel()),
         ],
-        child: const RecorderApp(),
+        child: const RecorderApp(initialPath: '/tmp/ScreenRecordings'),
       ),
     );
 
@@ -28,7 +28,7 @@ void main() {
           ChangeNotifierProvider(create: (_) => SettingsModel()),
         ],
         child: MaterialApp(
-          home: const RecorderApp(),
+          home: const RecorderApp(initialPath: '/tmp/ScreenRecordings'),
         ),
       ),
     );

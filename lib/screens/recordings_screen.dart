@@ -5,10 +5,10 @@ import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 
 class RecordingsScreen extends StatefulWidget {
-  const RecordingsScreen({Key? key}) : super(key: key);
+  const RecordingsScreen({super.key});
 
   @override
-  _RecordingsScreenState createState() => _RecordingsScreenState();
+  State<RecordingsScreen> createState() => _RecordingsScreenState();
 }
 
 class _RecordingsScreenState extends State<RecordingsScreen> {
@@ -24,43 +24,141 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     // Clean up thumbnail cache
     for (final thumbnailPath in _thumbnailCache.values) {
       if (thumbnailPath != null) {
-        File(thumbnailPath).delete().catchError((_) {});
+        final file = File(thumbnailPath);
+        unawaited(file.delete().catchError((_) => file));
       }
     }
     super.dispose();
   }
   
   Future<String?> _getVideoThumbnail(String videoPath) async {
-    if (_thumbnailCache.containsKey(videoPath)) {
-      return _thumbnailCache[videoPath];
-    }
-
     try {
+      // Check cache first
+      if (_thumbnailCache.containsKey(videoPath)) {
+        final cachedPath = _thumbnailCache[videoPath];
+        if (cachedPath != null) {
+          final cachedFile = File(cachedPath);
+          if (await cachedFile.exists()) {
+            final size = await cachedFile.length();
+            if (size > 0) {
+              return cachedPath;
+            }
+          }
+        }
+      }
+
+      final videoFile = File(videoPath);
+      
+      // Check if file exists and has content
+      if (!await videoFile.exists()) {
+        debugPrint('❌ Video file does not exist: $videoPath');
+        return null;
+      }
+      
+      final fileSize = await videoFile.length();
+      if (fileSize < 1024) {  // Less than 1KB is likely corrupt
+        debugPrint('⚠️ Video file is too small ($fileSize bytes), likely corrupt: $videoPath');
+        return null;
+      }
+
       final tempDir = await getTemporaryDirectory();
       final thumbnailDir = Directory('${tempDir.path}/thumbnails');
       await thumbnailDir.create(recursive: true);
       
       final thumbnailPath = '${thumbnailDir.path}/${path.basenameWithoutExtension(videoPath)}.jpg';
       
-      // Use FFmpeg to generate thumbnail with proper format
-      final result = await Process.run('ffmpeg', [
-        '-i', videoPath,
-        '-ss', '00:00:00.5',  // Take a frame at 0.5 seconds (earlier in case video is short)
-        '-vframes', '1',      // Take only 1 frame
-        '-q:v', '2',          // Quality (2-31, lower is better)
-        '-f', 'image2',       // Force output format to image
-        '-vcodec', 'mjpeg',   // Use MJPEG codec
-        '-y',                 // Overwrite output file if it exists
-        thumbnailPath,
-      ]);
-      
-      if (result.exitCode == 0 && await File(thumbnailPath).exists()) {
-        _thumbnailCache[videoPath] = thumbnailPath;
-        return thumbnailPath;
-      } else {
-        debugPrint('FFmpeg error: ${result.stderr}');
-        return null;
+      // Try multiple methods to generate thumbnail
+      final methods = [
+        // Method 1: Simple thumbnail with scale
+        {
+          'args': [
+            '-i', videoPath,
+            '-ss', '00:00:01.000',
+            '-vframes', '1',
+            '-vf', 'scale=320:-1:force_original_aspect_ratio=decrease',
+            '-f', 'image2',
+            '-vcodec', 'mjpeg',
+            '-q:v', '2',
+            '-y',
+            thumbnailPath,
+          ],
+          'description': 'Simple MJPEG',
+        },
+        // Method 2: PNG with more compatibility options
+        {
+          'args': [
+            '-i', videoPath,
+            '-ss', '00:00:01.000',
+            '-vframes', '1',
+            '-f', 'image2',
+            '-vcodec', 'png',
+            '-pix_fmt', 'rgb24',
+            '-y',
+            '$thumbnailPath.png',
+          ],
+          'description': 'PNG fallback',
+        },
+        // Method 3: Try with different pixel format
+        {
+          'args': [
+            '-i', videoPath,
+            '-ss', '00:00:01.000',
+            '-vframes', '1',
+            '-f', 'image2',
+            '-vcodec', 'png',
+            '-pix_fmt', 'rgba',
+            '-y',
+            '$thumbnailPath.png',
+          ],
+          'description': 'PNG RGBA fallback',
+        },
+      ];
+
+      for (var method in methods) {
+        try {
+          debugPrint('Trying thumbnail method: ${method['description']}');
+          await Process.run(
+            'ffmpeg',
+            List<String>.from(method['args'] as List),
+            runInShell: true,
+          );
+          
+          // If we generated a PNG, convert it to JPG
+          if (method['description'].toString().contains('PNG')) {
+            final pngPath = '$thumbnailPath.png';
+            if (await File(pngPath).exists()) {
+              try {
+                await Process.run('convert', [pngPath, thumbnailPath]);
+                await File(pngPath).delete();
+              } catch (e) {
+                debugPrint('Error converting PNG to JPG: $e');
+                // Use the PNG if conversion fails
+                if (await File(pngPath).exists()) {
+                  _thumbnailCache[videoPath] = pngPath;
+                  return pngPath;
+                }
+              }
+            }
+          }
+          
+          // Check if we have a valid thumbnail
+          if (await File(thumbnailPath).exists()) {
+            final thumbSize = await File(thumbnailPath).length();
+            if (thumbSize > 0) {
+              _thumbnailCache[videoPath] = thumbnailPath;
+              return thumbnailPath;
+            }
+          }
+          
+        } catch (e) {
+          debugPrint('Error in ${method['description']}: $e');
+        }
       }
+      
+      // If all else fails, return a default thumbnail
+      debugPrint('All thumbnail generation methods failed for: $videoPath');
+      return null;
+      
     } catch (e) {
       debugPrint('Error generating thumbnail: $e');
       return null;

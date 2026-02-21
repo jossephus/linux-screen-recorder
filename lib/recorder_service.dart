@@ -24,7 +24,7 @@ class RecorderService {
   Future<Map<String, dynamic>> getStatus() async {
     final dynamic result = await _channel.invokeMethod<dynamic>('getStatus');
     if (result is Map) {
-      return Map<String, dynamic>.from(result as Map<dynamic, dynamic>);
+      return Map<String, dynamic>.from(result);
     }
     return <String, dynamic>{'state': 'unknown', 'message': 'Invalid status response'};
   }
