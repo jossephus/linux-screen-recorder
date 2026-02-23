@@ -14,6 +14,7 @@
 #include <cmath>
 #include <cstring>
 #include <sstream>
+#include <tuple>
 
 using screen_recorder::utils::MakeEvenDimensions;
 

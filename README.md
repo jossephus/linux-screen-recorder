@@ -22,6 +22,55 @@ For the best audio capture reliability, use a modern PipeWire-based user stack.
 
 If your distro already uses PipeWire, running preflight is still recommended to verify required services and portal integration.
 
+## Required Dependencies (Manual Local Build)
+
+If you build and run locally (without the packaged installer), install these first:
+
+- Build tooling: `clang`, `cmake`, `ninja`, `pkg-config`
+- Native build headers/libs: GTK3, PipeWire 0.3, SPA 0.2
+- Runtime encoder: `ffmpeg` (required by recorder process)
+- Runtime services: `pipewire`, `wireplumber`, `xdg-desktop-portal` and a portal backend for your desktop
+
+Install commands:
+
+Ubuntu/Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y \
+  clang cmake ninja-build pkg-config libgtk-3-dev \
+  libpipewire-0.3-dev libspa-0.2-dev \
+  pipewire pipewire-pulse wireplumber \
+  xdg-desktop-portal xdg-desktop-portal-gtk \
+  pulseaudio-utils ffmpeg
+```
+
+Fedora/RHEL:
+
+```bash
+sudo dnf -y install \
+  clang cmake ninja-build pkg-config gtk3-devel \
+  pipewire-devel pipewire-jack-audio-connection-kit-devel \
+  pipewire pipewire-alsa pipewire-pulseaudio wireplumber \
+  xdg-desktop-portal xdg-desktop-portal-gtk pulseaudio-utils
+sudo dnf -y install ffmpeg || sudo dnf -y install ffmpeg-free
+```
+
+Arch/EndeavourOS:
+
+```bash
+sudo pacman -S --needed \
+  clang cmake ninja pkgconf gtk3 pipewire libpipewire wireplumber \
+  xdg-desktop-portal ffmpeg
+```
+
+Then run:
+
+```bash
+flutter pub get
+flutter build linux --release
+```
+
 ## Local Development
 
 From `flutter_app/`:
