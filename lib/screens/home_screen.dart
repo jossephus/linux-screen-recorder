@@ -139,6 +139,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     'Audio',
                     settings.audioEnabled ? 'Enabled' : 'Disabled',
                   ),
+                  _buildSettingRow(
+                    Icons.high_quality,
+                    'Resolution',
+                    settings.outputResolutionLabel,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      'If selected region is smaller than preset, output stays at region size (no upscaling).',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   _buildSaveLocationRow(settings.savePath),
                 ],
@@ -240,6 +255,8 @@ class _HomeScreenState extends State<HomeScreen> {
         path: savePath,
         fps: settings.fps,
         audio: settings.audioEnabled,
+        audioDevice: settings.audioDevice,
+        outputHeight: settings.outputResolutionHeight,
       );
 
       if (!mounted) return;

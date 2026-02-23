@@ -26,7 +26,8 @@ PipeWireCapture::PipeWireCapture(uint32_t node_id,
                                  uint32_t max_frames,
                                  bool encode_mp4,
                                  bool capture_audio,
-                                 std::string audio_device)
+                                 std::string audio_device,
+                                 int output_height)
     : node_id_(node_id),
       pipewire_fd_(pipewire_fd),
       width_(width),
@@ -36,7 +37,8 @@ PipeWireCapture::PipeWireCapture(uint32_t node_id,
       max_frames_(max_frames),
       encode_mp4_(encode_mp4),
       capture_audio_(capture_audio),
-      audio_device_(std::move(audio_device)) {
+      audio_device_(std::move(audio_device)),
+      output_height_(output_height) {
   std::tie(width_, height_) = MakeEvenDimensions(width_, height_);
   stream_width_ = width_;
   stream_height_ = height_;
@@ -249,6 +251,7 @@ bool PipeWireCapture::Init(std::string* error_out) {
   if (encode_mp4_) {
     ffmpeg_writer_ = new FfmpegWriter();
     if (!ffmpeg_writer_->Start(width_, height_, fps_, output_path_, capture_audio_, audio_device_,
+                               output_height_,
                                error_out)) {
       return false;
     }

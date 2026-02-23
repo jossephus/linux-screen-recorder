@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Screen Recorder
+Comment=Record your screen on Linux/Wayland
+Exec=screen-recorder
+TryExec=screen-recorder
+Terminal=false
+Categories=AudioVideo;Recorder;
+StartupNotify=true

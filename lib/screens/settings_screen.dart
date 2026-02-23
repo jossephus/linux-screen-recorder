@@ -13,6 +13,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late TextEditingController _fpsController;
   late TextEditingController _pathController;
+  int _outputResolutionHeight = 0;
   bool _isSaving = false;
   bool _isLoading = true;
 
@@ -26,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings = context.read<SettingsModel>();
     _fpsController = TextEditingController(text: settings.fps.toString());
     _pathController = TextEditingController(text: settings.savePath);
+    _outputResolutionHeight = settings.outputResolutionHeight;
     setState(() => _isLoading = false);
   }
 
@@ -49,6 +51,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // Update save path if changed
       if (_pathController.text != settings.savePath) {
         await settings.updateSavePath(_pathController.text);
+      }
+
+      if (_outputResolutionHeight != settings.outputResolutionHeight) {
+        await settings.updateOutputResolutionHeight(_outputResolutionHeight);
       }
       
       if (mounted) {
@@ -148,6 +154,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               color: settings.audioEnabled ? Colors.green : Colors.grey,
                             ),
                           ),
+                          DropdownButtonFormField<int>(
+                            initialValue: _outputResolutionHeight,
+                            decoration: InputDecoration(
+                              labelText: 'Output Resolution',
+                              border: OutlineInputBorder(),
+                              helperText:
+                                  'Presets from native display (${settings.displayWidth}x${settings.displayHeight}) down to 480p',
+                            ),
+                            items: [
+                              DropdownMenuItem<int>(
+                                value: 0,
+                                child: Text('Native (${settings.displayWidth}x${settings.displayHeight})'),
+                              ),
+                              ...settings.availableResolutionHeights.map(
+                                (height) => DropdownMenuItem<int>(
+                                  value: height,
+                                  child: Text(_formatPresetLabel(height, settings)),
+                                ),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setState(() {
+                                _outputResolutionHeight = value;
+                              });
+                            },
+                          ),
+                          const Text(
+                            'When capturing a rectangular region smaller than the preset, the recorder will keep the region size and will not upscale.',
+                            style: TextStyle(
+                              color: Colors.blueGrey,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (_showLowQualityWarning(settings))
+                            const Text(
+                              'Warning: this output is much smaller than your screen (<=60%). Small text and UI details will look pixelated and blurred.',
+                              style: TextStyle(color: Colors.orange, fontWeight: FontWeight.w600),
+                            ),
                         ],
                       ),
                     ),
@@ -192,5 +240,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
+  }
+
+  String _formatPresetLabel(int targetHeight, SettingsModel settings) {
+    final width = ((settings.displayWidth * targetHeight) / settings.displayHeight).round();
+    final evenWidth = (width ~/ 2) * 2;
+    return '${evenWidth}x$targetHeight (${targetHeight}p)';
+  }
+
+  bool _showLowQualityWarning(SettingsModel settings) {
+    if (_outputResolutionHeight <= 0 || settings.displayHeight <= 0) {
+      return false;
+    }
+    final ratio = _outputResolutionHeight / settings.displayHeight;
+    return ratio <= 0.6;
   }
 }

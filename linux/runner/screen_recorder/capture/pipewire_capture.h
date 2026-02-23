@@ -20,7 +20,8 @@ class PipeWireCapture {
                   uint32_t max_frames,
                   bool encode_mp4,
                   bool capture_audio,
-                  std::string audio_device);
+                  std::string audio_device,
+                  int output_height);
   ~PipeWireCapture();
 
   bool Run(std::string* error_out);
@@ -51,6 +52,7 @@ class PipeWireCapture {
   bool encode_mp4_;
   bool capture_audio_;
   std::string audio_device_;
+  int output_height_;
 
   FILE* output_file_ = nullptr;
   class FfmpegWriter* ffmpeg_writer_ = nullptr;

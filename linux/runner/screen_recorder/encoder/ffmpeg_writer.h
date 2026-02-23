@@ -16,6 +16,7 @@ class FfmpegWriter {
              const std::string& output_path,
              bool capture_audio,
              const std::string& audio_device,
+             int output_height,
              std::string* error_out);
   bool WriteFrame(const uint8_t* data, size_t size, std::string* error_out);
   bool Stop(std::string* error_out);

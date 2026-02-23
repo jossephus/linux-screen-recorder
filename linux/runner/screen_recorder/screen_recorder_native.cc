@@ -27,6 +27,7 @@ bool ScreenRecorderNative::StartRecording(const std::string& output_path,
                                           uint32_t fps,
                                           bool capture_audio,
                                           const std::string& audio_device,
+                                          int output_height,
                                           std::string* error_out) {
   {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -58,7 +59,8 @@ bool ScreenRecorderNative::StartRecording(const std::string& output_path,
                                                    0,
                                                    true,
                                                    capture_audio,
-                                                   audio_device);
+                                                   audio_device,
+                                                   output_height);
 
   {
     std::lock_guard<std::mutex> lock(mutex_);

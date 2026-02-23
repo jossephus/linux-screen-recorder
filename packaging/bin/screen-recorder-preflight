@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+PREFLIGHT_DIR="${APP_ROOT}/preflight"
+
+if [[ "${1:-}" == "--detect-audio-only" ]]; then
+  "${SCRIPT_DIR}/screen-recorder-detect-audio-device"
+  exit 0
+fi
+
+if [[ ! -f /etc/os-release ]]; then
+  echo "[preflight][error] Cannot detect distro: /etc/os-release missing" >&2
+  exit 1
+fi
+
+# shellcheck disable=SC1091
+source /etc/os-release
+
+if [[ "${ID:-}" == "ubuntu" || "${ID:-}" == "debian" || "${ID_LIKE:-}" == *"debian"* ]]; then
+  exec "${PREFLIGHT_DIR}/setup_debian_ubuntu.sh"
+fi
+
+if [[ "${ID:-}" == "fedora" || "${ID:-}" == "rhel" || "${ID:-}" == "centos" || "${ID_LIKE:-}" == *"rhel"* || "${ID_LIKE:-}" == *"fedora"* ]]; then
+  exec "${PREFLIGHT_DIR}/setup_fedora_rhel.sh"
+fi
+
+if [[ "${ID:-}" == "arch" || "${ID:-}" == "endeavouros" || "${ID_LIKE:-}" == *"arch"* ]]; then
+  exec "${PREFLIGHT_DIR}/setup_arch_endeavouros.sh"
+fi
+
+echo "[preflight][error] Unsupported distro: ${ID:-unknown}" >&2
+exit 1

@@ -19,6 +19,7 @@ class ScreenRecorderNative {
                       uint32_t fps,
                       bool capture_audio,
                       const std::string& audio_device,
+                      int output_height,
                       std::string* error_out);
   bool StopRecording(std::string* error_out);
   void GetStatus(std::string* state_out, std::string* message_out) const;

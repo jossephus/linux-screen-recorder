@@ -1,0 +1,64 @@
+name: Linux Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semantic version without leading v"
+        required: true
+      create_release:
+        description: "Publish GitHub Release"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config libgtk-3-dev \
+            libpipewire-0.3-dev libspa-0.2-dev
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Build Linux release
+        run: flutter build linux --release
+
+      - name: Build distributable bundle
+        run: ./packaging/create_release_bundle.sh "${{ inputs.version }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: screen-recorder-${{ inputs.version }}-linux-x64
+          path: |
+            dist/screen-recorder-${{ inputs.version }}-linux-x64.tar.gz
+            dist/screen-recorder-${{ inputs.version }}-linux-x64.tar.gz.sha256
+
+      - name: Create GitHub Release
+        if: inputs.create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Screen Recorder v${{ inputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/screen-recorder-${{ inputs.version }}-linux-x64.tar.gz
+            dist/screen-recorder-${{ inputs.version }}-linux-x64.tar.gz.sha256

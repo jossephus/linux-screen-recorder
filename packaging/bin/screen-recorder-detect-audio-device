@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+trim() {
+  local s="$1"
+  s="${s#${s%%[![:space:]]*}}"
+  s="${s%${s##*[![:space:]]}}"
+  printf '%s' "$s"
+}
+
+if [[ -n "${SCREEN_RECORDER_AUDIO_DEVICE:-}" ]]; then
+  trim "${SCREEN_RECORDER_AUDIO_DEVICE}"
+  exit 0
+fi
+
+if [[ -f "${HOME}/.config/screen-recorder/audio-device" ]]; then
+  saved="$(trim "$(head -n1 "${HOME}/.config/screen-recorder/audio-device" 2>/dev/null || true)")"
+  if [[ -n "${saved}" ]]; then
+    printf '%s\n' "${saved}"
+    exit 0
+  fi
+fi
+
+if command -v pactl >/dev/null 2>&1; then
+  default_sink="$(trim "$(pactl get-default-sink 2>/dev/null || true)")"
+  if [[ -n "${default_sink}" ]]; then
+    monitor_source="${default_sink}.monitor"
+    if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -Fxq "${monitor_source}"; then
+      printf '%s\n' "${monitor_source}"
+      exit 0
+    fi
+  fi
+
+  first_monitor="$(pactl list short sources 2>/dev/null | awk '$2 ~ /\.monitor$/ {print $2; exit}')"
+  if [[ -n "${first_monitor}" ]]; then
+    printf '%s\n' "${first_monitor}"
+    exit 0
+  fi
+fi
+
+printf 'default\n'

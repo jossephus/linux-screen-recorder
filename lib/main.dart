@@ -12,6 +12,15 @@ void main() async {
   
   // Initialize settings model
   final settings = SettingsModel();
+  await settings.ready;
+  final recorderService = RecorderService();
+  final detectedAudioDevice = await recorderService.getRecommendedAudioDevice();
+  await settings.updateAudioDevice(detectedAudioDevice);
+  final displayResolution = await recorderService.getDisplayResolution();
+  settings.updateDisplayResolution(
+    displayResolution['width'] ?? 1920,
+    displayResolution['height'] ?? 1080,
+  );
   
   // Set up default save path
   final videosDir = Directory('${Platform.environment['HOME']}/Videos/ScreenRecordings');
@@ -26,7 +35,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: settings),
-        ChangeNotifierProvider(create: (_) => RecorderController(RecorderService())),
+        ChangeNotifierProvider(create: (_) => RecorderController(recorderService)),
       ],
       child: RecorderApp(
         initialPathCheck: true, 

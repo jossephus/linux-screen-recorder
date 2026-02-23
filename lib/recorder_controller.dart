@@ -24,6 +24,7 @@ class RecorderController extends ChangeNotifier {
     int fps = 60,
     bool audio = false,
     String audioDevice = 'default',
+    int outputHeight = 0,
   }) async {
     try {
       _isBusy = true;
@@ -35,6 +36,7 @@ class RecorderController extends ChangeNotifier {
         fps: fps,
         audio: audio,
         audioDevice: audioDevice,
+        outputHeight: outputHeight,
       );
       
       _isRecording = true;
