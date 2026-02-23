@@ -14,6 +14,7 @@ class RecordingsScreen extends StatefulWidget {
 class _RecordingsScreenState extends State<RecordingsScreen> {
   List<FileSystemEntity> _recordings = [];
   final Map<String, String?> _thumbnailCache = {};
+  final Map<String, String?> _durationCache = {};
   bool _isLoading = true;
   String _error = '';
   File? _pendingDeletionFile;
@@ -161,6 +162,43 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
       
     } catch (e) {
       debugPrint('Error generating thumbnail: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _getVideoDuration(String videoPath) async {
+    if (_durationCache.containsKey(videoPath)) {
+      return _durationCache[videoPath];
+    }
+    try {
+      final result = await Process.run(
+        'ffprobe',
+        [
+          '-v',
+          'error',
+          '-show_entries',
+          'format=duration',
+          '-of',
+          'default=noprint_wrappers=1:nokey=1',
+          videoPath,
+        ],
+        runInShell: true,
+      );
+      final output = result.stdout?.toString().trim() ?? '';
+      if (output.isEmpty) {
+        _durationCache[videoPath] = null;
+        return null;
+      }
+      final seconds = double.tryParse(output);
+      if (seconds == null || seconds.isNaN || seconds.isInfinite || seconds < 0) {
+        _durationCache[videoPath] = null;
+        return null;
+      }
+      final formatted = _formatDuration(Duration(seconds: seconds.round()));
+      _durationCache[videoPath] = formatted;
+      return formatted;
+    } catch (_) {
+      _durationCache[videoPath] = null;
       return null;
     }
   }
@@ -354,6 +392,42 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}';
+    }
+    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
+  }
+
+  Widget _buildMetaChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.grey[700]),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[800],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -382,53 +456,104 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                         final fileName = path.basename(file.path);
 
                         return Card(
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          child: ListTile(
-                            leading: FutureBuilder<String?>(
-                              future: _getVideoThumbnail(file.path),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState == ConnectionState.done && 
-                                    snapshot.hasData && 
-                                    snapshot.data != null) {
-                                  return Container(
-                                    width: 60,
-                                    height: 60,
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(4),
-                                      image: DecorationImage(
-                                        image: FileImage(File(snapshot.data!)),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  );
-                                }
-                                return Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[300],
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: const Icon(Icons.videocam, size: 30, color: Colors.grey),
-                                );
-                              },
-                            ),
-                            title: Text(
-                              fileName,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text('$date • $size'),
+                          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          clipBehavior: Clip.antiAlias,
+                          child: InkWell(
                             onTap: () {
                               Process.run('xdg-open', [file.path]);
                             },
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: _pendingDeletionFile == null 
-                                  ? () => _confirmDelete(file)
-                                  : null,
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  FutureBuilder<String?>(
+                                    future: _getVideoThumbnail(file.path),
+                                    builder: (context, snapshot) {
+                                      if (snapshot.connectionState == ConnectionState.done &&
+                                          snapshot.hasData &&
+                                          snapshot.data != null) {
+                                        return Container(
+                                          width: 112,
+                                          height: 68,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(8),
+                                            image: DecorationImage(
+                                              image: FileImage(File(snapshot.data!)),
+                                              fit: BoxFit.cover,
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      return Container(
+                                        width: 112,
+                                        height: 68,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: const Icon(Icons.videocam, size: 30, color: Colors.grey),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          fileName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        FutureBuilder<String?>(
+                                          future: _getVideoDuration(file.path),
+                                          builder: (context, snapshot) {
+                                            final durationText = snapshot.data ?? '--:--';
+                                            return Wrap(
+                                              spacing: 8,
+                                              runSpacing: 8,
+                                              children: [
+                                                _buildMetaChip(Icons.timer_outlined, 'Duration $durationText'),
+                                                _buildMetaChip(Icons.sd_storage_outlined, size),
+                                                _buildMetaChip(Icons.calendar_today_outlined, date),
+                                              ],
+                                            );
+                                          },
+                                        ),
+                                        const SizedBox(height: 10),
+                                        Row(
+                                          children: [
+                                            OutlinedButton.icon(
+                                              onPressed: () {
+                                                Process.run('xdg-open', [file.path]);
+                                              },
+                                              icon: const Icon(Icons.play_arrow, size: 16),
+                                              label: const Text('Open'),
+                                              style: OutlinedButton.styleFrom(
+                                                visualDensity: VisualDensity.compact,
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.red),
+                                    tooltip: 'Delete recording',
+                                    onPressed: _pendingDeletionFile == null
+                                        ? () => _confirmDelete(file)
+                                        : null,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         );
