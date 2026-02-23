@@ -41,7 +41,7 @@ jobs:
         run: nix develop --command flutter pub get
 
       - name: Build Linux release
-        run: nix develop --command flutter build linux --release
+        run: nix develop --command flutter build linux --release -v
 
       - name: Build distributable bundle
         run: nix develop --command ./packaging/create_release_bundle.sh "${{ inputs.version }}"

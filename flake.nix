@@ -9,28 +9,45 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
-        isLinux = pkgs.stdenv.isLinux;
-        linuxDeps = with pkgs; [
-          clang
-          cmake
-          ninja
-          pkg-config
-          gtk3
-          pipewire
-          ffmpeg
-        ];
-        commonDeps = with pkgs; [
-          clang
-          cmake
-          ninja
-          pkg-config
-          ffmpeg
-        ];
+        pkgs = import nixpkgs {
+          inherit system;
+        };
       in
       {
         devShells.default = pkgs.mkShell {
-          buildInputs = if isLinux then linuxDeps else commonDeps;
+          nativeBuildInputs = with pkgs; [
+            clang
+            cmake
+            ninja
+            pkg-config
+          ];
+
+          buildInputs = with pkgs; [
+            flutter
+            gtk3
+            at-spi2-core
+            dbus
+            libdatrie
+            libepoxy
+            libselinux
+            libsepol
+            libthai
+            fontconfig
+            libxkbcommon
+            libxdmcp
+            libxtst
+            libtiff
+            libdeflate
+            lerc
+            xz          # liblzma
+            zstd        # libzstd
+            pipewire
+            ffmpeg
+            glib
+            libsysprof-capture
+            pcre2
+            util-linux
+          ];
         };
       }
     );
